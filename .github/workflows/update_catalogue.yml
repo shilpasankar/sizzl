@@ -3,7 +3,7 @@ name: Update romance catalogue
 on:
   schedule:
     - cron: "0 9 * * 1"   # every Monday at 09:00 UTC
-  workflow_dispatch:       # allows manual trigger
+  workflow_dispatch:
 
 jobs:
   update:
@@ -20,10 +20,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests
+          pip install requests pandas
 
       - name: Run romance catalogue script
         run: |
+          cd sizzl
           python update_romance_catalogue.py
 
       - name: Commit updated catalogue
@@ -31,5 +32,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add sizzl/data/romance_catalogue_*.csv
+          git add sizzl/data/romance_catalogue.csv
           git commit -m "Update romance catalogue" || echo "No changes to commit"
           git push
