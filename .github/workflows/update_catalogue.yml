@@ -3,7 +3,7 @@ name: Update romance catalogue
 on:
   schedule:
     - cron: "0 9 * * 1"   # every Monday at 09:00 UTC
-  workflow_dispatch:       # allow manual trigger from Actions tab
+  workflow_dispatch:       # allows manual trigger
 
 jobs:
   update:
@@ -22,7 +22,7 @@ jobs:
         run: |
           pip install requests
 
-      - name: Run catalogue update script
+      - name: Run romance catalogue script
         run: |
           cd sizzl
           python update_romance_catalogue.py
