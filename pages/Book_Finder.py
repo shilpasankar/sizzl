@@ -24,17 +24,6 @@ st.markdown(
         color: #f5f5f5cc;
         margin-bottom: 1rem;
     }
-    .sizzl-pill {
-        display: inline-block;
-        padding: 0.2rem 0.7rem;
-        margin-right: 0.3rem;
-        margin-bottom: 0.3rem;
-        border-radius: 999px;
-        background-color: #2b2b2f;
-        color: #ffdee7;
-        font-size: 0.8rem;
-        border: 1px solid #ff4d6d33;
-    }
     .sizzl-card {
         padding: 0.9rem 1rem;
         border-radius: 0.8rem;
@@ -68,7 +57,7 @@ st.markdown(
 # -------------- HEADER --------------
 st.markdown('<div class="sizzl-title">📚 SizzlClub · Book Finder</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="sizzl-subtitle">Search for romance & spicy reads, then browse your results in a Sizzl shelf layout.</div>',
+    '<div class="sizzl-subtitle">Search for romance & spicy reads, then skim a Sizzl shelf of featured picks.</div>',
     unsafe_allow_html=True
 )
 
@@ -105,88 +94,106 @@ HEROINE_TRAITS = [
 ]
 
 
-# -------------- SIDEBAR --------------
+# -------------- SIDEBAR WITH FORM (ENTER TO SUBMIT) --------------
 with st.sidebar:
-    st.markdown("### 🔎 Search")
+    with st.form("search_form", clear_on_submit=False):
+        st.markdown("### 🔎 Search")
+        query = st.text_input(
+            "Title / author / keyword",
+            placeholder="e.g. 'fake dating', 'dark romance', 'Ali Hazelwood'"
+        )
+        max_results = st.slider("Max results", 5, 40, 16, step=4)
 
-    query = st.text_input(
-        "Title / author / keyword",
-        placeholder="e.g. 'fake dating', 'dark romance', 'Ali Hazelwood'"
-    )
-    max_results = st.slider("Max results", 5, 40, 16, step=4)
+        st.markdown("---")
+        st.markdown("### 🌶 Sizzl filters (vibe only)")
 
-    st.markdown("---")
-    st.markdown("### 🌶 Sizzl filters (vibe only)")
+        # Spice Level
+        st.caption("**Spice Level (1–5 chillies)**")
+        col_inc, col_exc = st.columns(2)
+        with col_inc:
+            spice_inc = st.multiselect("Include", SPICE_LEVELS, key="spice_inc")
+        with col_exc:
+            spice_exc = st.multiselect("Exclude", SPICE_LEVELS, key="spice_exc")
 
-    # Spice Level
-    st.caption("**Spice Level (1–5 chillies)**")
-    col_inc, col_exc = st.columns(2)
-    with col_inc:
-        spice_inc = st.multiselect("Include", SPICE_LEVELS, key="spice_inc")
-    with col_exc:
-        spice_exc = st.multiselect("Exclude", SPICE_LEVELS, key="spice_exc")
+        # Genre
+        st.caption("**Genre**")
+        col_inc_g, col_exc_g = st.columns(2)
+        with col_inc_g:
+            genre_inc = st.multiselect("Include", GENRES, key="genre_inc")
+        with col_exc_g:
+            genre_exc = st.multiselect("Exclude", GENRES, key="genre_exc")
 
-    # Genre
-    st.caption("**Genre**")
-    col_inc_g, col_exc_g = st.columns(2)
-    with col_inc_g:
-        genre_inc = st.multiselect("Include", GENRES, key="genre_inc")
-    with col_exc_g:
-        genre_exc = st.multiselect("Exclude", GENRES, key="genre_exc")
+        # Relationship
+        st.caption("**Relationship (number of people)**")
+        col_inc_r, col_exc_r = st.columns(2)
+        with col_inc_r:
+            rel_inc = st.multiselect("Include", RELATIONSHIP, key="rel_inc")
+        with col_exc_r:
+            rel_exc = st.multiselect("Exclude", RELATIONSHIP, key="rel_exc")
 
-    # Relationship
-    st.caption("**Relationship (number of people)**")
-    col_inc_r, col_exc_r = st.columns(2)
-    with col_inc_r:
-        rel_inc = st.multiselect("Include", RELATIONSHIP, key="rel_inc")
-    with col_exc_r:
-        rel_exc = st.multiselect("Exclude", RELATIONSHIP, key="rel_exc")
+        # Tropes
+        st.caption("**Tropes**")
+        col_inc_t, col_exc_t = st.columns(2)
+        with col_inc_t:
+            tropes_inc = st.multiselect("Include", TROPES, key="tropes_inc")
+        with col_exc_t:
+            tropes_exc = st.multiselect("Exclude", TROPES, key="tropes_exc")
 
-    # Tropes
-    st.caption("**Tropes**")
-    col_inc_t, col_exc_t = st.columns(2)
-    with col_inc_t:
-        tropes_inc = st.multiselect("Include", TROPES, key="tropes_inc")
-    with col_exc_t:
-        tropes_exc = st.multiselect("Exclude", TROPES, key="tropes_exc")
+        # Content Warnings
+        st.caption("**Content Warnings**")
+        col_inc_cw, col_exc_cw = st.columns(2)
+        with col_inc_cw:
+            cw_inc = st.multiselect("Okay with", CONTENT_WARNINGS, key="cw_inc")
+        with col_exc_cw:
+            cw_exc = st.multiselect("Avoid", CONTENT_WARNINGS, key="cw_exc")
 
-    # Content Warnings
-    st.caption("**Content Warnings**")
-    col_inc_cw, col_exc_cw = st.columns(2)
-    with col_inc_cw:
-        cw_inc = st.multiselect("Okay with", CONTENT_WARNINGS, key="cw_inc")
-    with col_exc_cw:
-        cw_exc = st.multiselect("Avoid", CONTENT_WARNINGS, key="cw_exc")
+        # Hero traits
+        st.caption("**Hero personality / appearance**")
+        col_inc_h, col_exc_h = st.columns(2)
+        with col_inc_h:
+            hero_inc = st.multiselect("Include", HERO_TRAITS, key="hero_inc")
+        with col_exc_h:
+            hero_exc = st.multiselect("Exclude", HERO_TRAITS, key="hero_exc")
 
-    # Hero traits
-    st.caption("**Hero personality / appearance**")
-    col_inc_h, col_exc_h = st.columns(2)
-    with col_inc_h:
-        hero_inc = st.multiselect("Include", HERO_TRAITS, key="hero_inc")
-    with col_exc_h:
-        hero_exc = st.multiselect("Exclude", HERO_TRAITS, key="hero_exc")
+        # Heroine traits
+        st.caption("**Heroine personality / appearance**")
+        col_inc_he, col_exc_he = st.columns(2)
+        with col_inc_he:
+            heroine_inc = st.multiselect("Include", HEROINE_TRAITS, key="heroine_inc")
+        with col_exc_he:
+            heroine_exc = st.multiselect("Exclude", HEROINE_TRAITS, key="heroine_exc")
 
-    # Heroine traits
-    st.caption("**Heroine personality / appearance**")
-    col_inc_he, col_exc_he = st.columns(2)
-    with col_inc_he:
-        heroine_inc = st.multiselect("Include", HEROINE_TRAITS, key="heroine_inc")
-    with col_exc_he:
-        heroine_exc = st.multiselect("Exclude", HEROINE_TRAITS, key="heroine_exc")
-
-    st.markdown("---")
-    search_clicked = st.button("Search Open Library")
+        st.markdown("---")
+        search_clicked = st.form_submit_button("Search Open Library")
 
 st.markdown("---")
 
 
-# -------------- COVER HELPER --------------
+# -------------- HELPERS --------------
 def get_cover_url(doc):
     cover_id = doc.get("cover_i")
     if cover_id:
-        # Open Library cover API
         return f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
     return None
+
+
+def sort_key_for_series(doc):
+    """
+    Rough series-aware sort:
+    - Group by series name (if present)
+    - Then by first_publish_year
+    This way, multiple books from the same series appear together in order.
+    """
+    series = doc.get("series")
+    if isinstance(series, list) and series:
+        series_name = series[0]
+    else:
+        series_name = series or ""
+
+    year = doc.get("first_publish_year")
+    if year is None:
+        year = 99999  # push unknowns to the end
+    return (series_name.lower(), year)
 
 
 # -------------- MAIN SEARCH LOGIC --------------
@@ -209,9 +216,12 @@ if search_clicked:
         if not docs:
             st.info("No results found. Try tweaking your keywords.")
         else:
+            # Sort docs so series books appear grouped & ordered
+            docs = sorted(docs, key=sort_key_for_series)
+
             st.markdown(f"#### Results for **{query}**")
 
-            # ---------- FEATURED ROW (Goodreads-style) ----------
+            # ---------- FEATURED ROW (Goodreads-style shelf) ----------
             st.markdown("### Your Sizzl shelf for this search")
             featured = docs[:4]
             cols = st.columns(4)
@@ -225,7 +235,8 @@ if search_clicked:
 
                 with col:
                     if cover_url:
-                        col.image(cover_url, use_column_width=True)
+                        # Smaller image – more like Goodreads cover grid
+                        col.image(cover_url, use_column_width=False, width=110)
                     else:
                         col.write("📕 (no cover)")
 
@@ -235,16 +246,20 @@ if search_clicked:
                             unsafe_allow_html=True
                         )
                     else:
-                        col.markdown(f'<div class="sizzl-cover-title">{title}</div>', unsafe_allow_html=True)
+                        col.markdown(
+                            f'<div class="sizzl-cover-title">{title}</div>',
+                            unsafe_allow_html=True
+                        )
 
                     col.caption(authors)
 
             st.markdown("---")
 
-            # ---------- REST OF RESULTS (list view) ----------
+            # ---------- REST OF RESULTS (list view, NO repeats) ----------
             st.markdown("### More results")
 
-            for doc in docs:
+            # Skip the first 4 featured docs so we don't repeat titles
+            for doc in docs[4:]:
                 title = doc.get("title", "Unknown title")
                 authors = ", ".join(doc.get("author_name", [])[:3]) or "Unknown author"
                 year = doc.get("first_publish_year", "N/A")
@@ -252,14 +267,26 @@ if search_clicked:
                 key = doc.get("key", "")
                 work_url = f"https://openlibrary.org{key}" if key else None
 
+                # Series info (if present)
+                series = doc.get("series")
+                if isinstance(series, list) and series:
+                    series_label = series[0]
+                else:
+                    series_label = series
+
                 with st.container():
                     st.markdown('<div class="sizzl-card">', unsafe_allow_html=True)
+
                     if work_url:
                         st.markdown(f"**[{title}]({work_url})**")
                     else:
                         st.markdown(f"**{title}**")
+
+                    meta_line = f"{authors} · First published: {year}"
+                    if series_label:
+                        meta_line += f" · Series: {series_label}"
                     st.markdown(
-                        f'<span class="sizzl-meta">{authors} · First published: {year}</span>',
+                        f'<span class="sizzl-meta">{meta_line}</span>',
                         unsafe_allow_html=True
                     )
 
@@ -269,6 +296,7 @@ if search_clicked:
                     else:
                         st.write("_No subject tags available._")
 
+                    # Very rough "spice guess"
                     lower_subj = " ".join(subjects).lower()
                     spice_guess = ""
                     if any(word in lower_subj for word in ["erotic", "sex", "adult", "explicit"]):
