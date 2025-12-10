@@ -1,0 +1,36 @@
+name: Update romance catalogue
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"   # every Monday at 09:00 UTC
+  workflow_dispatch:       # allow manual trigger from Actions tab
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Run catalogue update script
+        run: |
+          cd sizzl
+          python update_romance_catalogue.py
+
+      - name: Commit updated catalogue
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sizzl/data/romance_catalogue_*.csv
+          git commit -m "Update romance catalogue" || echo "No changes to commit"
+          git push
