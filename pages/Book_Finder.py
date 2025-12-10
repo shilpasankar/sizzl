@@ -81,6 +81,29 @@ def load_catalogue() -> pd.DataFrame:
 
 
 df_catalogue = load_catalogue()
+from collections import Counter
+
+def split_pipe_values(series: pd.Series) -> Counter:
+    """
+    Takes a column like 'Enemies to Lovers|Slow Burn' and returns
+    a Counter of all individual values across the catalogue.
+    """
+    c = Counter()
+    for val in series.dropna():
+        for part in str(val).split("|"):
+            item = part.strip()
+            if item:
+                c[item] += 1
+    return c
+
+# Compute once for the whole catalogue
+RELATIONSHIP_COUNTS = split_pipe_values(
+    df_catalogue["relationship"] if "relationship" in df_catalogue.columns else pd.Series(dtype=str)
+)
+TROPE_COUNTS = split_pipe_values(
+    df_catalogue["tropes"] if "tropes" in df_catalogue.columns else pd.Series(dtype=str)
+)
+
 
 # -------------- FILTER OPTIONS --------------
 SPICE_LEVELS = ["🌶 1", "🌶🌶 2", "🌶🌶🌶 3", "🌶🌶🌶🌶 4", "🌶🌶🌶🌶🌶 5"]
