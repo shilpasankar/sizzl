@@ -55,6 +55,11 @@ st.markdown(
         color: #ff9bb0;
         margin-left: 0.4rem;
     }
+    .sizzl-cover-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-top: 0.4rem;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -63,7 +68,7 @@ st.markdown(
 # -------------- HEADER --------------
 st.markdown('<div class="sizzl-title">📚 SizzlClub · Book Finder</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="sizzl-subtitle">Search for romance & spicy reads, then layer on your Sizzl filters to describe exactly what you’re in the mood for.</div>',
+    '<div class="sizzl-subtitle">Search for romance & spicy reads, then browse your results in a Sizzl shelf layout.</div>',
     unsafe_allow_html=True
 )
 
@@ -104,11 +109,14 @@ HEROINE_TRAITS = [
 with st.sidebar:
     st.markdown("### 🔎 Search")
 
-    query = st.text_input("Title / author / keyword", placeholder="e.g. 'fake dating', 'dark romance', 'Ali Hazelwood'")
-    max_results = st.slider("Max results", 5, 30, 10, step=5)
+    query = st.text_input(
+        "Title / author / keyword",
+        placeholder="e.g. 'fake dating', 'dark romance', 'Ali Hazelwood'"
+    )
+    max_results = st.slider("Max results", 5, 40, 16, step=4)
 
     st.markdown("---")
-    st.markdown("### 🌶 Sizzl filters")
+    st.markdown("### 🌶 Sizzl filters (vibe only)")
 
     # Spice Level
     st.caption("**Spice Level (1–5 chillies)**")
@@ -172,37 +180,13 @@ with st.sidebar:
 st.markdown("---")
 
 
-# -------------- VIBE SUMMARY --------------
-def sizzl_profile():
-    pills = []
-
-    def add_pills(prefix, items):
-        for it in items:
-            pills.append(f"{prefix}{it}")
-
-    add_pills("", spice_inc)
-    add_pills("no ", spice_exc)
-    add_pills("", genre_inc)
-    add_pills("no ", genre_exc)
-    add_pills("", rel_inc)
-    add_pills("no ", rel_exc)
-    add_pills("", tropes_inc)
-    add_pills("no ", tropes_exc)
-    add_pills("ok: ", cw_inc)
-    add_pills("avoid: ", cw_exc)
-    add_pills("hero: ", hero_inc)
-    add_pills("no hero: ", hero_exc)
-    add_pills("heroine: ", heroine_inc)
-    add_pills("no heroine: ", heroine_exc)
-
-    if not pills:
-        return "_No extra filters selected. Open to vibes._"
-
-    html = "".join(
-        f'<span class="sizzl-pill">{p}</span>'
-        for p in pills
-    )
-    return html
+# -------------- COVER HELPER --------------
+def get_cover_url(doc):
+    cover_id = doc.get("cover_i")
+    if cover_id:
+        # Open Library cover API
+        return f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
+    return None
 
 
 # -------------- MAIN SEARCH LOGIC --------------
@@ -210,81 +194,97 @@ if search_clicked:
     if not query.strip():
         st.warning("Type in a title, author, or trope to search.")
     else:
-        col_left, col_right = st.columns([3, 1], gap="large")
+        with st.spinner("Looking through the stacks at Open Library..."):
+            url = "https://openlibrary.org/search.json"
+            params = {"q": query, "limit": max_results}
+            try:
+                resp = requests.get(url, params=params, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+                docs = data.get("docs", [])
+            except Exception as e:
+                st.error(f"Something went wrong while searching: {e}")
+                docs = []
 
-        with col_left:
-            st.markdown("### Your Sizzl profile for this search")
-            st.markdown(sizzl_profile(), unsafe_allow_html=True)
+        if not docs:
+            st.info("No results found. Try tweaking your keywords.")
+        else:
+            st.markdown(f"#### Results for **{query}**")
 
-            with st.spinner("Looking through the stacks at Open Library..."):
-                url = "https://openlibrary.org/search.json"
-                params = {"q": query, "limit": max_results}
-                try:
-                    resp = requests.get(url, params=params, timeout=10)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    docs = data.get("docs", [])
-                except Exception as e:
-                    st.error(f"Something went wrong while searching: {e}")
-                    docs = []
+            # ---------- FEATURED ROW (Goodreads-style) ----------
+            st.markdown("### Your Sizzl shelf for this search")
+            featured = docs[:4]
+            cols = st.columns(4)
 
-            if not docs:
-                st.info("No results found. Try tweaking your keywords.")
-            else:
-                st.markdown(f"#### Results for **{query}**")
+            for col, doc in zip(cols, featured):
+                title = doc.get("title", "Unknown title")
+                authors = ", ".join(doc.get("author_name", [])[:2]) or "Unknown author"
+                key = doc.get("key", "")
+                work_url = f"https://openlibrary.org{key}" if key else None
+                cover_url = get_cover_url(doc)
 
-                for doc in docs:
-                    title = doc.get("title", "Unknown title")
-                    authors = ", ".join(doc.get("author_name", [])[:3]) or "Unknown author"
-                    year = doc.get("first_publish_year", "N/A")
-                    subjects = doc.get("subject", []) or []
+                with col:
+                    if cover_url:
+                        col.image(cover_url, use_column_width=True)
+                    else:
+                        col.write("📕 (no cover)")
 
-                    with st.container():
-                        st.markdown('<div class="sizzl-card">', unsafe_allow_html=True)
-                        st.markdown(f"**{title}**", unsafe_allow_html=True)
+                    if work_url:
+                        col.markdown(
+                            f'<div class="sizzl-cover-title"><a href="{work_url}" target="_blank">{title}</a></div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        col.markdown(f'<div class="sizzl-cover-title">{title}</div>', unsafe_allow_html=True)
+
+                    col.caption(authors)
+
+            st.markdown("---")
+
+            # ---------- REST OF RESULTS (list view) ----------
+            st.markdown("### More results")
+
+            for doc in docs:
+                title = doc.get("title", "Unknown title")
+                authors = ", ".join(doc.get("author_name", [])[:3]) or "Unknown author"
+                year = doc.get("first_publish_year", "N/A")
+                subjects = doc.get("subject", []) or []
+                key = doc.get("key", "")
+                work_url = f"https://openlibrary.org{key}" if key else None
+
+                with st.container():
+                    st.markdown('<div class="sizzl-card">', unsafe_allow_html=True)
+                    if work_url:
+                        st.markdown(f"**[{title}]({work_url})**")
+                    else:
+                        st.markdown(f"**{title}**")
+                    st.markdown(
+                        f'<span class="sizzl-meta">{authors} · First published: {year}</span>',
+                        unsafe_allow_html=True
+                    )
+
+                    if subjects:
+                        chips = ", ".join(subjects[:8])
+                        st.write(f"**Subjects:** {chips}")
+                    else:
+                        st.write("_No subject tags available._")
+
+                    lower_subj = " ".join(subjects).lower()
+                    spice_guess = ""
+                    if any(word in lower_subj for word in ["erotic", "sex", "adult", "explicit"]):
+                        spice_guess = "🌶🌶🌶 Probably high spice"
+                    elif any(word in lower_subj for word in ["romance", "love", "relationship"]):
+                        spice_guess = "🌶🌶 Likely romantic"
+                    elif subjects:
+                        spice_guess = "🌶 Might be more general fiction"
+
+                    if spice_guess:
                         st.markdown(
-                            f'<span class="sizzl-meta">{authors} · First published: {year}</span>',
+                            f'<span class="sizzl-badge-soft">{spice_guess}</span>',
                             unsafe_allow_html=True
                         )
 
-                        if subjects:
-                            chips = ", ".join(subjects[:8])
-                            st.write(f"**Subjects:** {chips}")
-                        else:
-                            st.write("_No subject tags available._")
-
-                        # Very rough "spice guess"
-                        lower_subj = " ".join(subjects).lower()
-                        spice_guess = ""
-                        if any(word in lower_subj for word in ["erotic", "sex", "adult", "explicit"]):
-                            spice_guess = "🌶🌶🌶 Probably high spice"
-                        elif any(word in lower_subj for word in ["romance", "love", "relationship"]):
-                            spice_guess = "🌶🌶 Likely romantic"
-                        elif subjects:
-                            spice_guess = "🌶 Might be more general fiction"
-
-                        if spice_guess:
-                            st.markdown(
-                                f'<span class="sizzl-badge-soft">{spice_guess}</span>',
-                                unsafe_allow_html=True
-                            )
-
-                        st.markdown("</div>", unsafe_allow_html=True)
-
-        with col_right:
-            st.markdown("### How these filters work")
-            st.write(
-                "- Open Library doesn’t know about spice levels or hero archetypes, "
-                "so these filters are currently your *vibe profile* rather than hard filters.\n"
-                "- Later, SizzlClub can plug these into a custom rec engine or curated lists."
-            )
-
-            st.markdown("### Try this")
-            st.write(
-                "- Pick a **spice level** and **1–2 tropes**.\n"
-                "- Search something broad like 'romance' or 'dark romance'.\n"
-                "- Use the Sizzl profile chips to remember what you were craving."
-            )
+                    st.markdown("</div>", unsafe_allow_html=True)
 
 else:
     st.info("Start by searching for a book, trope, or author using the controls in the sidebar.")
