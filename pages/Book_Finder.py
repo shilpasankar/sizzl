@@ -220,6 +220,26 @@ with st.sidebar:
 
         st.markdown("---")
         search_clicked = st.form_submit_button("Filter Sizzl catalogue")
+        st.markdown("---")
+        st.markdown("### 📊 Sizzl catalogue stats")
+
+        with st.expander("Relationship types in catalogue"):
+            if not RELATIONSHIP_COUNTS:
+                st.caption("No relationship data yet.")
+            else:
+                rel_html = ""
+                for rel, count in RELATIONSHIP_COUNTS.most_common():
+                    rel_html += f'<span class="sizzl-pill">{rel} · {count}</span>'
+                st.markdown(rel_html, unsafe_allow_html=True)
+
+        with st.expander("Tropes in catalogue"):
+            if not TROPE_COUNTS:
+                st.caption("No trope data yet.")
+            else:
+                trope_html = ""
+                for trope, count in TROPE_COUNTS.most_common():
+                    trope_html += f'<span class="sizzl-pill">{trope} · {count}</span>'
+                st.markdown(trope_html, unsafe_allow_html=True)
 
 st.markdown("---")
 
