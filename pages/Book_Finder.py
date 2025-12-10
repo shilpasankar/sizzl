@@ -1,5 +1,6 @@
 import streamlit as st
-import requests
+import pandas as pd
+from pathlib import Path
 
 st.set_page_config(
     page_title="SizzlClub · Book Finder",
@@ -57,12 +58,29 @@ st.markdown(
 # -------------- HEADER --------------
 st.markdown('<div class="sizzl-title">📚 SizzlClub · Book Finder</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="sizzl-subtitle">Search for romance & spicy reads, then skim a Sizzl shelf of featured picks.</div>',
+    '<div class="sizzl-subtitle">Browsing only Sizzl’s romance catalogue — filtered by vibes, spice and tropes, not the whole internet.</div>',
     unsafe_allow_html=True
 )
 
 st.write("")
 
+
+# -------------- LOAD CATALOGUE (ONLY FROM CSV) --------------
+@st.cache_data
+def load_catalogue() -> pd.DataFrame:
+    """
+    Load the curated romance catalogue from data/romance_catalogue.csv.
+    """
+    path = Path("data") / "romance_catalogue.csv"
+    df = pd.read_csv(path)
+    # Normalise string columns to avoid NaN issues
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].fillna("")
+    return df
+
+
+df_catalogue = load_catalogue()
 
 # -------------- FILTER OPTIONS --------------
 SPICE_LEVELS = ["🌶 1", "🌶🌶 2", "🌶🌶🌶 3", "🌶🌶🌶🌶 4", "🌶🌶🌶🌶🌶 5"]
@@ -71,14 +89,28 @@ GENRES = [
     "Dark Romance", "Romantic Suspense", "Sci-Fi", "Sports Romance"
 ]
 RELATIONSHIP = [
-    "1-on-1", "Love Triangle", "Why Are There 4 Of Them",
-    "Reverse Harem / Why Choose", "Polyamory"
+    "1-on-1",
+    "Love Triangle",
+    "Why Are There 4 Of Them",  # your chaotic phrasing
+    "Why Choose",               # genre label
+    "Polyamory"
 ]
 TROPES = [
-    "Enemies to Lovers", "Friends to Lovers", "Childhood Friends",
-    "Fake Dating", "Forced Proximity", "Marriage of Convenience",
-    "Grumpy / Sunshine", "Boss / Employee", "Bodyguard",
-    "Second Chance", "Single Parent", "Forbidden Romance",
+    "Enemies to Lovers",
+    "Friends to Lovers",
+    "Childhood Friends",
+    "Fake Dating",
+    "Forced Proximity",
+    "Marriage of Convenience",
+    "Fated Mates",
+    "Second Chance",
+    "Single Parent",
+    "Forbidden Romance",
+    "Grumpy / Sunshine",
+    "Boss / Employee",
+    "Bodyguard",
+    "Only One Bed",
+    "Slow Burn",
 ]
 CONTENT_WARNINGS = [
     "Violence", "Abuse", "Cheating", "Death", "Addiction",
@@ -97,15 +129,15 @@ HEROINE_TRAITS = [
 # -------------- SIDEBAR WITH FORM (ENTER TO SUBMIT) --------------
 with st.sidebar:
     with st.form("search_form", clear_on_submit=False):
-        st.markdown("### 🔎 Search")
+        st.markdown("### 🔎 Search within Sizzl catalogue")
         query = st.text_input(
-            "Title / author / keyword",
-            placeholder="e.g. 'fake dating', 'dark romance', 'Ali Hazelwood'"
+            "Title / author / trope (optional)",
+            placeholder="Leave blank to just use filters"
         )
-        max_results = st.slider("Max results", 5, 40, 16, step=4)
+        max_results = st.slider("Max results", 5, 80, 24, step=4)
 
         st.markdown("---")
-        st.markdown("### 🌶 Sizzl filters (vibe only)")
+        st.markdown("### 🌶 Sizzl filters")
 
         # Spice Level
         st.caption("**Spice Level (1–5 chillies)**")
@@ -164,85 +196,134 @@ with st.sidebar:
             heroine_exc = st.multiselect("Exclude", HEROINE_TRAITS, key="heroine_exc")
 
         st.markdown("---")
-        search_clicked = st.form_submit_button("Search Open Library")
+        search_clicked = st.form_submit_button("Filter Sizzl catalogue")
 
 st.markdown("---")
 
 
-# -------------- HELPERS --------------
-def get_cover_url(doc):
-    cover_id = doc.get("cover_i")
-    if cover_id:
-        return f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
-    return None
+# -------------- FILTER HELPERS --------------
+
+def text_match(df: pd.DataFrame, q: str) -> pd.DataFrame:
+    """Filter by query in title / author / tropes (if query not empty)."""
+    if not q.strip():
+        return df
+    q = q.lower()
+    cols = []
+    for c in ["title", "author", "tropes"]:
+        if c in df.columns:
+            cols.append(df[c].astype(str).str.lower().str.contains(q, na=False))
+    if not cols:
+        return df
+    mask = cols[0]
+    for m in cols[1:]:
+        mask |= m
+    return df[mask]
 
 
-def sort_key_for_series(doc):
-    """
-    Rough series-aware sort:
-    - Group by series name (if present)
-    - Then by first_publish_year
-    This way, multiple books from the same series appear together in order.
-    """
-    series = doc.get("series")
-    if isinstance(series, list) and series:
-        series_name = series[0]
-    else:
-        series_name = series or ""
-
-    year = doc.get("first_publish_year")
-    if year is None:
-        year = 99999  # push unknowns to the end
-    return (series_name.lower(), year)
+def include_any(df: pd.DataFrame, col: str, selected: list):
+    """Keep rows where 'col' contains ANY of selected values (pipe-separated semantics)."""
+    if not selected or col not in df.columns:
+        return df
+    def row_ok(val: str) -> bool:
+        text = str(val).lower()
+        return any(s.lower() in text for s in selected)
+    return df[df[col].apply(row_ok)]
 
 
-# -------------- MAIN SEARCH LOGIC --------------
+def exclude_any(df: pd.DataFrame, col: str, selected: list):
+    """Drop rows where 'col' contains ANY of selected values."""
+    if not selected or col not in df.columns:
+        return df
+    def row_bad(val: str) -> bool:
+        text = str(val).lower()
+        return any(s.lower() in text for s in selected)
+    return df[~df[col].apply(row_bad)]
+
+
+def spice_string_to_int(s: str) -> int:
+    """Map '🌶 3' → 3."""
+    try:
+        return int(s.split()[-1])
+    except Exception:
+        return 0
+
+
+# -------------- MAIN LOGIC --------------
+
 if search_clicked:
-    if not query.strip():
-        st.warning("Type in a title, author, or trope to search.")
+    # Check if literally no query AND no filters
+    any_filters = any([
+        spice_inc, spice_exc,
+        genre_inc, genre_exc,
+        rel_inc, rel_exc,
+        tropes_inc, tropes_exc,
+        cw_inc, cw_exc,
+        hero_inc, hero_exc,
+        heroine_inc, heroine_exc,
+    ])
+    if not query.strip() and not any_filters:
+        st.info("Type a search OR pick at least one filter to browse the Sizzl catalogue.")
     else:
-        with st.spinner("Looking through the stacks at Open Library..."):
-            url = "https://openlibrary.org/search.json"
-            params = {"q": query, "limit": max_results}
-            try:
-                resp = requests.get(url, params=params, timeout=10)
-                resp.raise_for_status()
-                data = resp.json()
-                docs = data.get("docs", [])
-            except Exception as e:
-                st.error(f"Something went wrong while searching: {e}")
-                docs = []
+        df = df_catalogue.copy()
 
-        if not docs:
-            st.info("No results found. Try tweaking your keywords.")
+        # Query filter
+        df = text_match(df, query)
+
+        # Spice filters assume a numeric 'spice_level' column in your CSV
+        if "spice_level" in df.columns:
+            if spice_inc:
+                nums = [spice_string_to_int(s) for s in spice_inc]
+                df = df[df["spice_level"].isin(nums)]
+            if spice_exc:
+                nums = [spice_string_to_int(s) for s in spice_exc]
+                df = df[~df["spice_level"].isin(nums)]
+
+        # Other filters based on pipe-separated fields
+        df = include_any(df, "genres", genre_inc)
+        df = exclude_any(df, "genres", genre_exc)
+
+        df = include_any(df, "relationship", rel_inc)
+        df = exclude_any(df, "relationship", rel_exc)
+
+        df = include_any(df, "tropes", tropes_inc)
+        df = exclude_any(df, "tropes", tropes_exc)
+
+        df = include_any(df, "content_warnings", cw_inc)
+        df = exclude_any(df, "content_warnings", cw_exc)
+
+        df = include_any(df, "hero_traits", hero_inc)
+        df = exclude_any(df, "hero_traits", hero_exc)
+
+        df = include_any(df, "heroine_traits", heroine_inc)
+        df = exclude_any(df, "heroine_traits", heroine_exc)
+
+        # Limit rows
+        df = df.head(max_results)
+
+        if df.empty:
+            st.warning("No books match this combination yet. Try relaxing a filter or two.")
         else:
-            # Sort docs so series books appear grouped & ordered
-            docs = sorted(docs, key=sort_key_for_series)
+            st.markdown(f"#### Showing {len(df)} book(s) from the Sizzl catalogue")
 
-            st.markdown(f"#### Results for **{query}**")
+            # Featured row: first up to 4
+            featured = df.head(4)
+            cols = st.columns(len(featured))
 
-            # ---------- FEATURED ROW (Goodreads-style shelf) ----------
-            st.markdown("### Your Sizzl shelf for this search")
-            featured = docs[:4]
-            cols = st.columns(4)
-
-            for col, doc in zip(cols, featured):
-                title = doc.get("title", "Unknown title")
-                authors = ", ".join(doc.get("author_name", [])[:2]) or "Unknown author"
-                key = doc.get("key", "")
-                work_url = f"https://openlibrary.org{key}" if key else None
-                cover_url = get_cover_url(doc)
-
+            for (idx, row), col in zip(featured.iterrows(), cols):
                 with col:
-                    if cover_url:
-                        # Smaller image – more like Goodreads cover grid
+                    cover_url = row.get("cover_url", "")
+                    if isinstance(cover_url, str) and cover_url:
                         col.image(cover_url, use_column_width=False, width=110)
                     else:
                         col.write("📕 (no cover)")
 
-                    if work_url:
+                    title = row.get("title", "Untitled")
+                    link = row.get("link", "")
+                    author = row.get("author", "Unknown")
+
+                    if isinstance(link, str) and link:
                         col.markdown(
-                            f'<div class="sizzl-cover-title"><a href="{work_url}" target="_blank">{title}</a></div>',
+                            f'<div class="sizzl-cover-title"><a href="{link}" target="_blank">{title}</a></div>',
                             unsafe_allow_html=True
                         )
                     else:
@@ -250,70 +331,46 @@ if search_clicked:
                             f'<div class="sizzl-cover-title">{title}</div>',
                             unsafe_allow_html=True
                         )
-
-                    col.caption(authors)
+                    col.caption(author)
 
             st.markdown("---")
+            st.markdown("### More details")
 
-            # ---------- REST OF RESULTS (list view, NO repeats) ----------
-            st.markdown("### More results")
+            # List view (skip the ones already shown in featured)
+            remaining = df.iloc[4:]
+            for _, row in remaining.iterrows():
+                title = row.get("title", "Untitled")
+                author = row.get("author", "Unknown")
+                year = row.get("year", "")
+                series_name = row.get("series_name", "")
+                series_order = row.get("series_order", "")
+                link = row.get("link", "")
+                desc = row.get("description", "")
 
-            # Skip the first 4 featured docs so we don't repeat titles
-            for doc in docs[4:]:
-                title = doc.get("title", "Unknown title")
-                authors = ", ".join(doc.get("author_name", [])[:3]) or "Unknown author"
-                year = doc.get("first_publish_year", "N/A")
-                subjects = doc.get("subject", []) or []
-                key = doc.get("key", "")
-                work_url = f"https://openlibrary.org{key}" if key else None
-
-                # Series info (if present)
-                series = doc.get("series")
-                if isinstance(series, list) and series:
-                    series_label = series[0]
-                else:
-                    series_label = series
+                meta_bits = [author]
+                if year:
+                    meta_bits.append(str(year))
+                if series_name:
+                    s = series_name
+                    if series_order not in ("", None):
+                        s += f" · #{series_order}"
+                    meta_bits.append(s)
+                meta_line = " · ".join(meta_bits)
 
                 with st.container():
                     st.markdown('<div class="sizzl-card">', unsafe_allow_html=True)
-
-                    if work_url:
-                        st.markdown(f"**[{title}]({work_url})**")
+                    if link:
+                        st.markdown(f"**[{title}]({link})**")
                     else:
                         st.markdown(f"**{title}**")
-
-                    meta_line = f"{authors} · First published: {year}"
-                    if series_label:
-                        meta_line += f" · Series: {series_label}"
                     st.markdown(
                         f'<span class="sizzl-meta">{meta_line}</span>',
                         unsafe_allow_html=True
                     )
-
-                    if subjects:
-                        chips = ", ".join(subjects[:8])
-                        st.write(f"**Subjects:** {chips}")
-                    else:
-                        st.write("_No subject tags available._")
-
-                    # Very rough "spice guess"
-                    lower_subj = " ".join(subjects).lower()
-                    spice_guess = ""
-                    if any(word in lower_subj for word in ["erotic", "sex", "adult", "explicit"]):
-                        spice_guess = "🌶🌶🌶 Probably high spice"
-                    elif any(word in lower_subj for word in ["romance", "love", "relationship"]):
-                        spice_guess = "🌶🌶 Likely romantic"
-                    elif subjects:
-                        spice_guess = "🌶 Might be more general fiction"
-
-                    if spice_guess:
-                        st.markdown(
-                            f'<span class="sizzl-badge-soft">{spice_guess}</span>',
-                            unsafe_allow_html=True
-                        )
+                    if desc:
+                        st.write(desc[:400] + ("..." if len(desc) > 400 else ""))
 
                     st.markdown("</div>", unsafe_allow_html=True)
 
 else:
-    st.info("Start by searching for a book, trope, or author using the controls in the sidebar.")
-    st.write("Try something like **'enemies to lovers'**, **'college romance'**, or an author you adore.")
+    st.info("Use the sidebar to search or just pick filters — you don’t have to type anything if you already know your vibes.")
