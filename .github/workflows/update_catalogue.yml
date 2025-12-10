@@ -24,7 +24,6 @@ jobs:
 
       - name: Run romance catalogue script
         run: |
-          cd sizzl
           python update_romance_catalogue.py
 
       - name: Commit updated catalogue
