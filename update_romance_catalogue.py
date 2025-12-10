@@ -1,13 +1,13 @@
 """
 update_romance_catalogue.py
 
-Pulls romance-ish books from the Open Library Search API and writes them to a
-date-stamped CSV in the data/ folder, e.g.:
+1. Pulls romance-ish books from the Open Library Search API.
+2. Writes a date-stamped raw CSV, e.g.:
+   data/romance_catalogue_250110.csv
+3. Merges new rows into data/romance_catalogue.csv (master), de-duplicating by 'link'.
 
-data/romance_catalogue_250110.csv
-
-Columns:
-id, title, author, series_name, series_order, year, description, link, cover_url
+Master file can have extra columns (spice_level, tropes, etc.) which will be preserved.
+New rows will have those extra fields blank for you to fill later.
 """
 
 import csv
@@ -17,6 +17,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 import requests
+import pandas as pd
 
 
 # ------------------- CONFIG -------------------
@@ -25,13 +26,9 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# How many total records to aim for in one run
-TARGET_COUNT = 2000  # tweak as you like
-
-# Open Library search parameters
+TARGET_COUNT = 2000  # adjust as you like
 BASE_URL = "https://openlibrary.org/search.json"
 
-# Subject filters to bias towards romance
 ROMANCE_SUBJECTS = [
     "romance",
     "romantic fiction",
@@ -39,20 +36,19 @@ ROMANCE_SUBJECTS = [
 ]
 
 
-def make_output_path() -> Path:
+def make_raw_output_path() -> Path:
     """Generate a yymmdd-stamped filename."""
     stamp = datetime.utcnow().strftime("%y%m%d")
     return DATA_DIR / f"romance_catalogue_{stamp}.csv"
 
 
-# ------------------- HELPERS -------------------
+MASTER_PATH = DATA_DIR / "romance_catalogue.csv"
+
+
+# ------------------- FETCH HELPERS -------------------
 
 def fetch_page(page: int, limit: int = 100) -> Dict[str, Any]:
-    params = {
-        "q": "romance",
-        "page": page,
-        "limit": limit,
-    }
+    params = {"q": "romance", "page": page, "limit": limit}
     resp = requests.get(BASE_URL, params=params, timeout=20)
     resp.raise_for_status()
     return resp.json()
@@ -124,7 +120,7 @@ def doc_to_row(doc: Dict[str, Any], row_id: int) -> Dict[str, Any]:
     }
 
 
-def write_csv(rows: List[Dict[str, Any]], path: Path) -> None:
+def write_raw_csv(rows: List[Dict[str, Any]], path: Path) -> None:
     fieldnames = [
         "id",
         "title",
@@ -143,6 +139,60 @@ def write_csv(rows: List[Dict[str, Any]], path: Path) -> None:
             writer.writerow(row)
 
 
+# ------------------- MERGE INTO MASTER -------------------
+
+def merge_into_master(raw_path: Path, master_path: Path) -> None:
+    """
+    Merge raw data into master catalogue.
+    - Uses 'link' as a unique key.
+    - Preserves existing rows & columns.
+    - Only appends NEW links.
+    """
+    print(f"Merging {raw_path.name} into {master_path.name}...")
+
+    df_raw = pd.read_csv(raw_path)
+
+    # Ensure basic columns exist
+    required_cols = [
+        "id", "title", "author", "series_name",
+        "series_order", "year", "description", "link", "cover_url",
+    ]
+    for col in required_cols:
+        if col not in df_raw.columns:
+            df_raw[col] = ""
+
+    if master_path.exists():
+        df_master = pd.read_csv(master_path)
+    else:
+        # Start fresh master with just the raw columns
+        df_master = pd.DataFrame(columns=required_cols)
+
+    # Use 'link' as unique key
+    df_master_links = set(df_master["link"].dropna().tolist())
+    df_raw_new = df_raw[~df_raw["link"].isin(df_master_links)].copy()
+
+    if df_raw_new.empty:
+        print("No new books to add to master.")
+        return
+
+    # Align columns: master may have extra cols (spice_level, tropes, etc.)
+    for col in df_master.columns:
+        if col not in df_raw_new.columns:
+            df_raw_new[col] = ""
+
+    # Ensure raw columns exist in master (if new technical fields ever added)
+    for col in df_raw_new.columns:
+        if col not in df_master.columns:
+            df_master[col] = ""
+
+    # Reorder columns to master order, then append new rows
+    df_raw_new = df_raw_new[df_master.columns]
+    df_updated = pd.concat([df_master, df_raw_new], ignore_index=True)
+
+    df_updated.to_csv(master_path, index=False, encoding="utf-8")
+    print(f"Added {len(df_raw_new)} new books to {master_path.name}")
+
+
 # ------------------- MAIN -------------------
 
 def main():
@@ -150,9 +200,9 @@ def main():
     page = 1
     row_id = 1
 
-    print(f"Fetching romance books from Open Library until we have ~{TARGET_COUNT} records...")
-    output_path = make_output_path()
-    print(f"Will write to: {output_path}")
+    raw_output_path = make_raw_output_path()
+    print(f"Fetching romance books… target ~{TARGET_COUNT} rows")
+    print(f"Raw output: {raw_output_path}")
 
     while len(all_rows) < TARGET_COUNT:
         print(f"Fetching page {page}...")
@@ -185,8 +235,11 @@ def main():
         time.sleep(1.0)
 
     print(f"Collected {len(all_rows)} romance-ish books.")
-    write_csv(all_rows, output_path)
-    print(f"Wrote {len(all_rows)} rows to {output_path.resolve()}")
+    write_raw_csv(all_rows, raw_output_path)
+    print(f"Wrote {len(all_rows)} rows to {raw_output_path.resolve()}")
+
+    # Merge into master
+    merge_into_master(raw_output_path, MASTER_PATH)
 
 
 if __name__ == "__main__":
