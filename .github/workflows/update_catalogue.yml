@@ -2,8 +2,8 @@ name: Update romance catalogue
 
 on:
   schedule:
-    - cron: "0 9 * * 1"   # every Monday at 09:00 UTC
-  workflow_dispatch:
+    - cron: "0 9 * * 1"   # weekly
+  workflow_dispatch:       # allow manual trigger
 
 jobs:
   update:
@@ -30,7 +30,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sizzl/data/romance_catalogue_*.csv
-          git add sizzl/data/romance_catalogue.csv
-          git commit -m "Update romance catalogue" || echo "No changes to commit"
+
+          # Correct folder where your files truly are:
+          git add data/romance_catalogue_*.csv || echo "No raw files"
+          git add data/romance_catalogue.csv || echo "No master file"
+
+          git commit -m "Update romance catalogue" || echo "No changes"
           git push
